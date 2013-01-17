@@ -6,37 +6,103 @@
 (define (start)
   (big-bang (new world%
                  (new player% (new posn% 0 0))
-                 (new mouse% (new posn% 0 0)))))
+                 (new mouse% (new posn% 0 0))
+                 (new cons-zombies%
+                      (new slow-zombie% (new posn% 50 50))
+                      (new empty-zombies%))
+                 (new cons-zombies%
+                      (new zombie% (new posn% 50 50))
+                      (new cons-zombies%
+                           (new slow-zombie% (new posn% 50 50))
+                           (new empty-zombies%))))))
+                 
 
 (define WIDTH 400)
 (define HEIGHT 400)
 (define MT-SCENE (empty-scene WIDTH HEIGHT))
-(define PLAYER-SPEED 1)
+(define PLAYER-SPEED 4)
+(define ZOMBIE-SPEED 2)
+(define ZOMBIE-RADIUS 10)
 (define PLAYER-RADIUS 10)
 (define PLAYER-IMG (circle PLAYER-RADIUS "solid" "green"))
 
+;; A World is a (new world% Player Mouse Zombies Zombies)
 (define-class world%
-  (fields player mouse)
+  (fields player mouse dead undead)
   ;; Number Number MouseEvent -> WorldState
   (define (on-mouse x y me)
-    (cond [(string=? me "leave")
-           (new world%
-                (this . player)
-                (new mouse% (this . player . posn)))]
-                     
-          [else
-           (new world%
-                (this . player)
-                #;(send (send this mouse) on-mouse x y me)
-                (new mouse% (new posn% x y)))]))
+    (new world%
+         (this . player)
+         (cond [(string=? me "leave")
+                (new mouse% (this . player . posn))]
+               [else
+                (new mouse% (new posn% x y))])         
+         (this . dead)
+         (this . undead)))
   
   (define (on-tick)
     (new world%
          (this . player . move-toward (this . mouse . posn))
-         (send this mouse)))
+         (send this mouse)
+         (this . dead)
+         (this . undead . move-toward (this . player . posn))))
+  
   (define (to-draw)
-    (send (send this player) draw-on
-          MT-SCENE)))
+    (this . player . draw-on          
+          (this . dead . draw-on/color "gray"
+                (this . undead . draw-on/color "red" MT-SCENE)))))
+
+;; A Zombies implements
+;; Move all of these zombies toward the given position
+;; move-toward : Posn -> Zombies
+;; Draw all of these zombies
+;; draw-on/color : Color Scene -> Scene
+
+(define-class empty-zombies%
+  (define (move-toward p)
+    this)
+  (define (draw-on/color color scn)
+    scn))
+  
+(define-class cons-zombies%
+  (fields first rest)
+  (define (move-toward p)
+    (new cons-zombies% 
+         (this . first . move-toward p)
+         (this . rest . move-toward p)))
+  (define (draw-on/color color scn)
+    (this . first . draw-on/color color
+          (this . rest . draw-on/color color scn))))
+
+;; A Zombie implements
+;; move-toward : Posn -> Zombie
+;; draw-on/color : Color Scene -> Scene
+(define-class zombie%
+  (fields posn)
+  (define (move-toward p)
+    (new zombie% (this . posn . move-toward/speed p ZOMBIE-SPEED)))
+  
+  (define (draw-on/color color scn)
+    (this . posn . draw-on/image
+          (circle ZOMBIE-RADIUS "solid" color)
+          scn)))
+  
+(define-class slow-zombie%
+  (fields posn)
+  (define (move-toward p)
+    (new slow-zombie% (this . posn . move-toward/speed p
+                            (/ ZOMBIE-SPEED 2))))
+  
+  (define (draw-on/color color scn)
+    (this . posn . draw-on/image
+          (circle ZOMBIE-RADIUS "solid" color)
+          scn)))
+  
+
+  
+  
+
+
 
 (define-class player%
   (fields posn)
