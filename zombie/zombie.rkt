@@ -1,4 +1,4 @@
-#lang class/0
+#lang class/1
 (require class/universe)
 (require 2htdp/image)
 
@@ -17,9 +17,22 @@
 
 (define-class world%
   (fields player mouse)
+  ;; Number Number MouseEvent -> WorldState
+  (define (on-mouse x y me)
+    (cond [(string=? me "leave")
+           (new world%
+                (this . player)
+                (new mouse% (this . player . posn)))]
+                     
+          [else
+           (new world%
+                (this . player)
+                #;(send (send this mouse) on-mouse x y me)
+                (new mouse% (new posn% x y)))]))
+  
   (define (on-tick)
     (new world%
-         (send (send this player) move-toward (send (send this mouse) posn))
+         (this . player . move-toward (this . mouse . posn))
          (send this mouse)))
   (define (to-draw)
     (send (send this player) draw-on
