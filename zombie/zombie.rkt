@@ -9,13 +9,16 @@
    (new world%
         (new player% origin)
         origin
-        (new cons-zombies%
-             (new slow-zombie% (new posn% 200 200))
-             empty-zs)
-        (new cons-zombies%
-             (new zombie% (new posn% 300 300))
+        (new hoard%
+             ;; undead zombies
              (new cons-zombies%
-                  (new slow-zombie% (new posn% 400 400))
+                  (new zombie% (new posn% 300 300))
+                  (new cons-zombies%
+                       (new slow-zombie% (new posn% 400 400))
+                       empty-zs))
+             ;; dead zombies
+             (new cons-zombies%
+                  (new slow-zombie% (new posn% 200 200))
                   empty-zs)))))
                  
 ;; Constants
@@ -48,6 +51,19 @@
 ;; - dist : Loc -> Real
 ;; - Compute distance from this position to given location
 
+;; A Hoard implements:
+;; - move-toward : Loc -> Hoard
+;; - Move all zombies in this hoard toward location
+;;
+;; - eat-brains : -> Hoard
+;; - Zombies eat all touching brains
+;; 
+;; - touching? : Loc -> Boolean
+;; - Are any zombies in this hoard touching given location?
+;;
+;; - draw-on : Scene -> Scene
+;; - Draw this hoard on the scene
+
 ;; A Zombie implements Loc and:
 ;; - move-toward : Loc -> Zombie
 ;; - Move this zombie toward the given position
@@ -75,10 +91,11 @@
 ;; - touching? : Loc -> Boolean
 ;; - Are any of these zombies touching the given location?
 
-;; A World is a (new world% Player Loc Zombies Zombies)
-;; Interp: Player, mouse location, dead zombies, undead zombies
+
+;; A World is a (new world% Player Loc Hoard)
+;; Interp: Player, mouse location, hoard of zombies
 (define-class world%
-  (fields player mouse dead undead)
+  (fields player mouse zombies)
   
   ;; Update mouse position unless it has left the screen
   ;; on-mouse : Number Number MouseEvent -> World
@@ -89,45 +106,51 @@
                 (this . player)]
                [else
                 (new posn% x y)])
-         (this . dead)
-         (this . undead)))
+         (this . zombies)))
   
   ;; Advance and eat brains!
   ;; on-tick : -> World
-  (define (on-tick)
-    (this . advance . eat-brains))
-  
-  ;; Advance the player and zombies
-  ;; advance : -> World
-  (define (advance)
+  (define (on-tick)    
     (new world%
          (this . player . move-toward (this . mouse))
          (this . mouse)
-         (this . dead)
-         (this . undead . move-toward (this . player))))
+         (this . zombies . eat-brains . move-toward (this . player))))
   
   ;; Draw the player and zombies in this world
   ;; to-draw : -> Scene
   (define (to-draw)
     (this . player . draw-on          
-          (this . dead . draw-on/color "gray"
-                (this . undead . draw-on/color "red" MT-SCENE))))
+          (this . zombies . draw-on MT-SCENE)))
   
   ;; Game is over when zombies touch the player
   ;; stop-when : -> Boolean
   (define (stop-when)
-    (or (this . dead . touching? (this . player))
-        (this . undead . touching? (this . player))))
+    (this . zombies . touching? (this . player))))
+
+;; Interp: a hoard of undead and dead zombies
+(define-class hoard%
+  (fields undead dead)
+  ;; draw-on : Scene -> Scene
+  (define (draw-on scn)
+    (this . undead . draw-on/color "red"
+          (this . dead . draw-on/color "gray"
+                scn)))
   
-  ;; Kill any zombies close enough to eat brains
-  ;; eat-brains : -> World
+  ;; touching? : Loc -> Boolean
+  (define (touching? loc)
+    (or (this . undead . touching? loc)
+        (this . dead . touching? loc)))
+  
+  ;; move-toward : Loc -> Hoard
+  (define (move-toward loc)
+    (new hoard%
+         (this . undead . move-toward loc)
+         (this . dead)))
+  
+  ;; eat-brains : -> Hoard
   (define (eat-brains)
-    (local [(define res (this . undead . kill-all (this . dead)))]
-      (new world%
-           (this . player)
-           (this . mouse)
-           (res . right)
-           (res . left)))))
+    (this . undead . kill-all (this . dead))))
+
 
 ;; Interp: an empty set of zombies
 (define-class empty-zombies%
@@ -146,12 +169,10 @@
   (check-expect (empty-zs . touching? origin) false)
   (define (touching? loc) false)
   
-  ;; kill-all : Zombies -> (new pair% Undead Dead)
+  ;; kill-all : Zombies -> Hoard
   (define (kill-all dead)
-    (new pair% empty-zs dead)))
+    (new hoard% empty-zs dead)))
 
-(define-class pair%
-  (fields left right))
 
 ;; Interp: a zombie plus some zombies
 ;; A ConsZombies is a (new cons-zombies% Zombie Zombies)
@@ -183,12 +204,12 @@
     (or (this . first . touching? loc)
         (this . rest  . touching? loc)))
   
-  ;; kill-all : Zombies -> (new pair% Undead Dead)
+  ;; kill-all : Zombies -> Hoard
   ;; Kill all touching zombies in this set and given dead zombies
   (check-expect (origin-zs . kill-all empty-zs)
-                (new pair% origin-zs empty-zs))
+                (new hoard% origin-zs empty-zs))
   (check-expect (origin-zs . kill-all origin-zs)
-                (new pair%
+                (new hoard%
                      empty-zs
                      (new cons-zombies% origin-z origin-zs)))
   (define (kill-all dead)
@@ -198,9 +219,10 @@
                  (new cons-zombies% (this . first) dead))]
           [else
            (local [(define res (this . rest . kill-all dead))]
-             (new pair%
-                  (new cons-zombies% (this . first) (res . left))
-                  (res . right)))])))
+             (new hoard%
+                  (new cons-zombies% (this . first) (res . undead))
+                  (res . dead)))])))
+
 
 ;; Interp: a full-speed zombie at posn
 (define-class zombie%
@@ -230,7 +252,8 @@
   (define (touching? loc)
     (<= (this . posn . dist loc)
         ZOMBIE-RADIUS)))
-    
+
+
 ;; Interp: a half-speed zombie at posn
 (define-class slow-zombie%
   (fields posn)
@@ -254,6 +277,7 @@
     (<= (this . posn . dist loc)
         ZOMBIE-RADIUS)))
 
+
 ;; Interp: a player at posn
 (define-class player%
   (fields posn)
@@ -271,6 +295,7 @@
                 ((new posn% 0 0) . draw-on/image PLAYER-IMG MT-SCENE))
   (define (draw-on scn)
     (this . posn . draw-on/image PLAYER-IMG scn)))
+
 
 ;; Interp: position in graphics-coordinates system
 (define-class posn%
