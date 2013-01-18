@@ -9,7 +9,7 @@
    (new world%
         (new player% origin)
         origin
-        (new hoard%
+        (new horde%
              ;; undead zombies
              (new cons-zombies%
                   (new zombie% (new posn% 300 300))
@@ -51,18 +51,18 @@
 ;; - dist : Loc -> Real
 ;; - Compute distance from this position to given location
 
-;; A Hoard implements:
-;; - move-toward : Loc -> Hoard
-;; - Move all zombies in this hoard toward location
+;; A Horde implements:
+;; - move-toward : Loc -> Horde
+;; - Move all zombies in this Horde toward location
 ;;
-;; - eat-brains : -> Hoard
+;; - eat-brains : -> Horde
 ;; - Zombies eat all touching brains
 ;; 
 ;; - touching? : Loc -> Boolean
-;; - Are any zombies in this hoard touching given location?
+;; - Are any zombies in this Horde touching given location?
 ;;
 ;; - draw-on : Scene -> Scene
-;; - Draw this hoard on the scene
+;; - Draw this Horde on the scene
 
 ;; A Zombie implements Loc and:
 ;; - move-toward : Loc -> Zombie
@@ -93,7 +93,7 @@
 
 
 ;; A World is a (new world% Player Loc Horde)
-;; Interp: Player, mouse location, hoard of zombies
+;; Interp: Player, mouse location, Horde of zombies
 (define-class world%
   (fields player mouse zombies)
   
@@ -127,8 +127,8 @@
   (define (stop-when)
     (this . zombies . touching? (this . player))))
 
-;; Interp: a hoard of undead and dead zombies
-(define-class hoard%
+;; Interp: a Horde of undead and dead zombies
+(define-class horde%
   (fields undead dead)
   ;; draw-on : Scene -> Scene
   (define (draw-on scn)
@@ -141,13 +141,13 @@
     (or (this . undead . touching? loc)
         (this . dead . touching? loc)))
   
-  ;; move-toward : Loc -> Hoard
+  ;; move-toward : Loc -> Horde
   (define (move-toward loc)
-    (new hoard%
+    (new horde%
          (this . undead . move-toward loc)
          (this . dead)))
   
-  ;; eat-brains : -> Hoard
+  ;; eat-brains : -> Horde
   (define (eat-brains)
     (this . undead . kill-all (this . dead))))
 
@@ -169,9 +169,9 @@
   (check-expect (empty-zs . touching? origin) false)
   (define (touching? loc) false)
   
-  ;; kill-all : Zombies -> Hoard
+  ;; kill-all : Zombies -> Horde
   (define (kill-all dead)
-    (new hoard% empty-zs dead)))
+    (new horde% empty-zs dead)))
 
 
 ;; Interp: a zombie plus some zombies
@@ -204,12 +204,12 @@
     (or (this . first . touching? loc)
         (this . rest  . touching? loc)))
   
-  ;; kill-all : Zombies -> Hoard
+  ;; kill-all : Zombies -> Horde
   ;; Kill all touching zombies in this set and given dead zombies
   (check-expect (origin-zs . kill-all empty-zs)
-                (new hoard% origin-zs empty-zs))
+                (new horde% origin-zs empty-zs))
   (check-expect (origin-zs . kill-all origin-zs)
-                (new hoard%
+                (new horde%
                      empty-zs
                      (new cons-zombies% origin-z origin-zs)))
   (define (kill-all dead)
@@ -219,7 +219,7 @@
                  (new cons-zombies% (this . first) dead))]
           [else
            (local [(define res (this . rest . kill-all dead))]
-             (new hoard%
+             (new horde%
                   (new cons-zombies% (this . first) (res . undead))
                   (res . dead)))])))
 
