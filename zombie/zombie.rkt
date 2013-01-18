@@ -1,6 +1,7 @@
 #lang class/1
 (require class/universe)
 (require 2htdp/image)
+(require "jack-o-lantern.rkt")
 
 ;; Start a new game of Zombie Attack!
 (define (start) 
@@ -23,9 +24,9 @@
 (define MT-SCENE (empty-scene WIDTH HEIGHT))
 (define PLAYER-SPEED 4)
 (define ZOMBIE-SPEED 2)
-(define ZOMBIE-RADIUS 10)
-(define PLAYER-RADIUS 10)
-(define PLAYER-IMG (circle PLAYER-RADIUS "solid" "green"))
+(define ZOMBIE-RADIUS 20)
+(define PLAYER-RADIUS 20)
+(define PLAYER-IMG (jack-o-lantern PLAYER-RADIUS "green"))
 
 ;; A Loc(ation) implements
 ;; - posn : -> Posn
@@ -215,11 +216,11 @@
   ;; Draw this zombie in given color on scene
   (check-expect (origin-z . draw-on/color "red" MT-SCENE)
                 (origin . draw-on/image 
-                        (circle ZOMBIE-RADIUS "solid" "red")
+                        (jack-o-lantern ZOMBIE-RADIUS "red")
                         MT-SCENE))
   (define (draw-on/color color scn)
     (this . posn . draw-on/image
-          (circle ZOMBIE-RADIUS "solid" color)
+          (jack-o-lantern ZOMBIE-RADIUS color)
           scn))
   
   ;; touching? : Loc -> Boolean
@@ -243,7 +244,7 @@
   ;; Draw this zombie in given color on scene
   (define (draw-on/color color scn)
     (this . posn . draw-on/image
-          (circle ZOMBIE-RADIUS "solid" color)
+          (jack-o-lantern ZOMBIE-RADIUS color)
           scn))
   
   ;; touching? : Loc -> Boolean
