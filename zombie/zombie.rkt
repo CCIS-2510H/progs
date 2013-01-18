@@ -3,19 +3,19 @@
 (require 2htdp/image)
 
 ;; Start a new game of Zombie Attack!
-(define (start)
+(define (start) 
   (big-bang 
    (new world%
-        (new player% (new posn% 0 0))
-        (new mouse% (new posn% 0 0))
+        (new player% origin)
+        origin
         (new cons-zombies%
-                      (new slow-zombie% (new posn% 50 50))
-                      (new empty-zombies%))
+             (new slow-zombie% (new posn% 200 200))
+             empty-zs)
         (new cons-zombies%
-             (new zombie% (new posn% 50 50))
+             (new zombie% (new posn% 300 300))
              (new cons-zombies%
-                  (new slow-zombie% (new posn% 50 50))
-                  (new empty-zombies%))))))
+                  (new slow-zombie% (new posn% 400 400))
+                  empty-zs)))))
                  
 ;; Constants
 (define WIDTH 400)
@@ -27,7 +27,55 @@
 (define PLAYER-RADIUS 10)
 (define PLAYER-IMG (circle PLAYER-RADIUS "solid" "green"))
 
-;; A World is a (new world% Player Mouse Zombies Zombies)
+;; A Loc(ation) implements
+;; - posn : -> Posn
+;; - Get the position of this location
+
+;; A Posn implements Loc and
+;; - x : -> Real
+;; - Get x-coorinate
+;;
+;; - y : -> Real
+;; - Get y-coordinate
+;;
+;; - move-toward/speed : Loc Real -> Posn
+;; - Move horizontally or vertically toward location at given speed
+;;
+;; - Draw image at this position on scene
+;; - draw-on/image : Image Scene -> Scene
+;;
+;; - dist : Loc -> Real
+;; - Compute distance from this position to given location
+
+;; A Zombie implements Loc and:
+;; - move-toward : Loc -> Zombie
+;; - Move this zombie toward the given position
+;;
+;; - draw-on/color : Color Scene -> Scene
+;; - Draw this zombie in given color on scene
+;;
+;; - touching? : Loc -> Boolean
+;; - Is this zombie touching the given location?
+
+;; A Player implements Loc and
+;; - move-toward : Loc -> Player
+;; - Move this player toward given location
+;;
+;; - draw-on : Scene -> Scene
+;; - Draw this player on scene
+
+;; A Zombies implements
+;; - move-toward : Posn -> Zombies
+;; - Move all of these zombies toward the given position
+;;
+;; - draw-on/color : Color Scene -> Scene
+;; - Draw all of these zombies
+;;
+;; - touching? : Loc -> Boolean
+;; - Are any of these zombies touching the given location?
+
+;; A World is a (new world% Player Loc Zombies Zombies)
+;; Interp: Player, mouse location, dead zombies, undead zombies
 (define-class world%
   (fields player mouse dead undead)
   
@@ -36,22 +84,26 @@
   (define (on-mouse x y me)
     (new world%
          (this . player)
-         (new mouse% 
-              (cond [(string=? me "leave")
-                     (this . player . posn)]
-                    [else
-                     (new posn% x y)]))
+         (cond [(string=? me "leave")
+                (this . player)]
+               [else
+                (new posn% x y)])
          (this . dead)
          (this . undead)))
   
-  ;; Advance the player and zombies
+  ;; Advance and eat brains!
   ;; on-tick : -> World
   (define (on-tick)
+    (this . advance . eat-brains))
+  
+  ;; Advance the player and zombies
+  ;; advance : -> World
+  (define (advance)
     (new world%
-         (this . player . move-toward (this . mouse . posn))
-         (send this mouse)
+         (this . player . move-toward (this . mouse))
+         (this . mouse)
          (this . dead)
-         (this . undead . move-toward (this . player . posn))))
+         (this . undead . move-toward (this . player))))
   
   ;; Draw the player and zombies in this world
   ;; to-draw : -> Scene
@@ -63,43 +115,42 @@
   ;; Game is over when zombies touch the player
   ;; stop-when : -> Boolean
   (define (stop-when)
-    (or (this . dead . touching-player? (this . player))
-        (this . undead . touching-player? (this . player)))))
-
-
-;; A Zombies implements
-;;
-;; Move all of these zombies toward the given position
-;; move-toward : Posn -> Zombies
-;;
-;; Draw all of these zombies
-;; draw-on/color : Color Scene -> Scene
-;;
-;; Are any of these zombies touching the given player?
-;; touching-player? : Player -> Boolean
+    (or (this . dead . touching? (this . player))
+        (this . undead . touching? (this . player))))
+  
+  ;; Kill any zombies close enough to eat brains
+  ;; eat-brains : -> World
+  (define (eat-brains)
+    (local [(define res (this . undead . kill-all (this . dead)))]
+      (new world%
+           (this . player)
+           (this . mouse)
+           (res . right)
+           (res . left)))))
 
 ;; Interp: an empty set of zombies
 (define-class empty-zombies%
   ;; Move none of these zombies toward the given position
   ;; move-toward : Posn -> Zombies
-  (check-expect ((new empty-zombies%) . move-toward (new posn% 0 0))
-                (new empty-zombies%))
-  (define (move-toward p)
-    this)
+  (check-expect (empty-zs . move-toward origin) empty-zs)
+  (define (move-toward p) this)
   
   ;; Draw none of these zombies
   ;; draw-on/color : Color Scene -> Scene
-  (check-expect ((new empty-zombies%) . draw-on/color "purple" MT-SCENE)
-                MT-SCENE)
-  (define (draw-on/color color scn)
-    scn)
+  (check-expect (empty-zs . draw-on/color "red" MT-SCENE) MT-SCENE)
+  (define (draw-on/color color scn) scn)
   
-  ;; Are any of these (zero) zombies touching the given player?
-  ;; touching-player? : Player -> Boolean
-  (check-expect ((new empty-zombies%) . touching-player? (new player% (new posn% 0 0)))
-                false)
-  (define (touching-player? player)
-    false))
+  ;; Are any of these (zero) zombies touching the given location?
+  ;; touching? : Loc -> Boolean
+  (check-expect (empty-zs . touching? origin) false)
+  (define (touching? loc) false)
+  
+  ;; kill-all : Zombies -> (new pair% Undead Dead)
+  (define (kill-all dead)
+    (new pair% empty-zs dead)))
+
+(define-class pair%
+  (fields left right))
 
 ;; Interp: a zombie plus some zombies
 ;; A ConsZombies is a (new cons-zombies% Zombie Zombies)
@@ -107,102 +158,99 @@
   (fields first rest)
   ;; Move all of these zombies toward the given position
   ;; move-toward : Posn -> Zombies
-  (check-expect ((new cons-zombies% 
-                      (new zombie% (new posn% 0 0))
-                      (new empty-zombies%)) . move-toward 
-                                            (new posn% 50 50))
+  (check-expect (origin-zs . move-toward origin) origin-zs)
+  (check-expect (origin-zs . move-toward (new posn% 50 50))
                 (new cons-zombies%
-                     ((new zombie% (new posn% 0 0)) . move-toward (new posn% 50 50))
-                     (new empty-zombies%)))
+                     (origin-z . move-toward (new posn% 50 50))
+                     empty-zs))  
   (define (move-toward p)
     (new cons-zombies% 
          (this . first . move-toward p)
-         (this . rest . move-toward p)))
+         (this . rest  . move-toward p)))
   
   ;; Draw all of these zombies in the given color
-  ;; draw-on/color : Color Scene -> Scene
-  (check-expect ((new cons-zombies% 
-                      (new zombie% (new posn% 0 0))
-                      (new empty-zombies%)) . draw-on/color "purple" MT-SCENE)
-                ((new zombie% (new posn% 0 0)) . draw-on/color "purple" MT-SCENE))
+  ;; draw-on/color : Color Scene -> Scene  
+  (check-expect (origin-zs . draw-on/color "purple" MT-SCENE)
+                (origin-z . draw-on/color "purple" MT-SCENE))
   (define (draw-on/color color scn)
     (this . first . draw-on/color color
           (this . rest . draw-on/color color scn)))
   
-  ;; Are any of these zombies touching the given player?
-  ;; touching-player? : Player -> Boolean
-  (check-expect ((new cons-zombies% 
-                      (new zombie% (new posn% 0 0))
-                      (new empty-zombies%)) . touching-player?
-                                            (new player% (new posn% 0 0)))
-                true)
-  (define (touching-player? player)
-    (or (this . first . touching-player? player)
-        (this . rest . touching-player? player))))
-    
-
-;; A Zombie implements:
-;;
-;; move-toward : Posn -> Zombie
-;; Move this zombie toward the given position
-;;
-;; draw-on/color : Color Scene -> Scene
-;; Draw this zombie in given color on scene
-;;
-;; touching-player? : Player -> Boolean
-;; Is this zombie touching the given player?
+  ;; Are any of these zombies touching the given location?
+  ;; touching? : Loc -> Boolean
+  (define (touching? loc)
+    (or (this . first . touching? loc)
+        (this . rest  . touching? loc)))
+  
+  ;; kill-all : Zombies -> (new pair% Undead Dead)
+  ;; Kill all touching zombies in this set and given dead zombies
+  (check-expect (origin-zs . kill-all empty-zs)
+                (new pair% origin-zs empty-zs))
+  (check-expect (origin-zs . kill-all origin-zs)
+                (new pair%
+                     empty-zs
+                     (new cons-zombies% origin-z origin-zs)))
+  (define (kill-all dead)
+    (cond [(or (this . rest . touching? (this . first))
+               (dead . touching? (this . first)))
+           (this . rest . kill-all
+                 (new cons-zombies% (this . first) dead))]
+          [else
+           (local [(define res (this . rest . kill-all dead))]
+             (new pair%
+                  (new cons-zombies% (this . first) (res . left))
+                  (res . right)))])))
 
 ;; Interp: a full-speed zombie at posn
 (define-class zombie%
   (fields posn)
-  ;; move-toward : Posn -> Zombie
-  ;; Move this zombie toward the given position
-  (check-expect ((new zombie% (new posn% 0 0)) . move-toward
-                                               (new posn% ZOMBIE-SPEED 0))
+  ;; move-toward : Loc -> Zombie
+  ;; Move this zombie toward the given location
+  (check-expect (origin-z . move-toward (new posn% ZOMBIE-SPEED 0))
                 (new zombie% (new posn% ZOMBIE-SPEED 0)))
   (define (move-toward p)
     (new zombie% (this . posn . move-toward/speed p ZOMBIE-SPEED)))
   
   ;; draw-on/color : Color Scene -> Scene
   ;; Draw this zombie in given color on scene
-  (check-expect ((new zombie% (new posn% 0 0)) . draw-on/color "red" MT-SCENE)
-                ((new posn% 0 0) . draw-on/image 
-                                 (circle ZOMBIE-RADIUS "solid" "red")
-                                 MT-SCENE))
+  (check-expect (origin-z . draw-on/color "red" MT-SCENE)
+                (origin . draw-on/image 
+                        (circle ZOMBIE-RADIUS "solid" "red")
+                        MT-SCENE))
   (define (draw-on/color color scn)
     (this . posn . draw-on/image
           (circle ZOMBIE-RADIUS "solid" color)
           scn))
   
-  ;; touching-player? : Player -> Boolean
-  ;; Is this zombie touching the given player?
-  (check-expect ((new zombie% (new posn% 0 0)) . touching-player? 
-                                               (new player% (new posn% 0 0)))
-                true)
-  (define (touching-player? player)
-    (<= (player . posn . dist (this . posn))
+  ;; touching? : Loc -> Boolean
+  ;; Is this zombie touching the given location?
+  (check-expect (origin-z . touching? origin) true)
+  (check-expect (origin-z . touching? origin-z) true)  
+  (define (touching? loc)
+    (<= (this . posn . dist loc)
         ZOMBIE-RADIUS)))
     
 ;; Interp: a half-speed zombie at posn
 (define-class slow-zombie%
   (fields posn)
   ;; move-toward : Posn -> Zombie
-  ;; Move this zombie toward the given position  
+  ;; Move this zombie toward the given position
   (define (move-toward p)
     (new slow-zombie% (this . posn . move-toward/speed p
                             (/ ZOMBIE-SPEED 2))))
   
   ;; draw-on/color : Color Scene -> Scene
-  ;; Draw this zombie in given color on scene  
+  ;; Draw this zombie in given color on scene
   (define (draw-on/color color scn)
     (this . posn . draw-on/image
           (circle ZOMBIE-RADIUS "solid" color)
           scn))
   
-  ;; touching-player? : Player -> Boolean
-  ;; Is this zombie touching the given player?
-  (define (touching-player? player)
-    (<= (player . posn . dist (this . posn))
+  ;; touching? : Loc -> Boolean
+  ;; Is this zombie touching the given location?
+  (check-expect (origin-zs . touching? origin-z) true)
+  (define (touching? loc)
+    (<= (this . posn . dist loc)
         ZOMBIE-RADIUS)))
 
 ;; Interp: a player at posn
@@ -223,30 +271,30 @@
   (define (draw-on scn)
     (this . posn . draw-on/image PLAYER-IMG scn)))
 
-;; Interp: mouse position
-(define-class mouse%
-  (fields posn))
-
 ;; Interp: position in graphics-coordinates system
 (define-class posn%
   (fields x y)
+  
+  ;; Loc implementation
+  (define (posn) this)
+  
   ;; Move this position toward that one at given velocity.
-  ;; move-toward : Point Number -> Posn
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 0 0) 100)
-                (new posn% 0 0))
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 100 0) 50)
+  ;; move-toward : Loc Number -> Posn
+  (check-expect (origin . move-toward/speed origin 100)
+                origin)
+  (check-expect (origin . move-toward/speed (new posn% 100 0) 50)
                 (new posn% 50 0))
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 0 100) 50)
+  (check-expect (origin . move-toward/speed (new posn% 0 100) 50)
                 (new posn% 0 50))
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 100 100) 50)
+  (check-expect (origin . move-toward/speed (new posn% 100 100) 50)
                 (new posn% 50 0))
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 100 101) 50)
+  (check-expect (origin . move-toward/speed (new posn% 100 101) 50)
                 (new posn% 0 50))
-  (check-expect ((new posn% 0 0) . move-toward/speed (new posn% 101 100) 50)
+  (check-expect (origin . move-toward/speed (new posn% 101 100) 50)
                 (new posn% 50 0))
   (define (move-toward/speed that speed)
-    (local [(define δ-x (- (that . x) (this . x)))
-            (define δ-y (- (that . y) (this . y)))
+    (local [(define δ-x (- (that . posn . x) (this . x)))
+            (define δ-y (- (that . posn . y) (this . y)))
             (define move-distance
               (min speed
                    (max (abs δ-x)
@@ -282,10 +330,17 @@
                  (this . y)
                  scn))
  
-  ;; dist : Point -> Number
-  ;; Compute the distance between this posn and that point.
-  (check-expect ((new posn% 0 0) . dist (new posn% 3 4)) 5)
+  ;; dist : Loc -> Number
+  ;; Compute the distance between this posn and that location.
+  (check-expect (origin . dist (new posn% 3 4)) 5)
   (define (dist that)
-    (sqrt (+ (sqr (- (that . y) (this . y)))
-             (sqr (- (that . x) (this . x)))))))
+    (sqrt (+ (sqr (- (that . posn . y) (this . y)))
+             (sqr (- (that . posn . x) (this . x)))))))
 
+
+;; --
+;; Definitions for testing
+(define origin (new posn% 0 0))
+(define origin-z (new zombie% origin))
+(define empty-zs (new empty-zombies%))
+(define origin-zs (new cons-zombies% origin-z empty-zs))
