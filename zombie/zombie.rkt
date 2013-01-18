@@ -92,7 +92,7 @@
 ;; - Are any of these zombies touching the given location?
 
 
-;; A World is a (new world% Player Loc Hoard)
+;; A World is a (new world% Player Loc Horde)
 ;; Interp: Player, mouse location, hoard of zombies
 (define-class world%
   (fields player mouse zombies)
