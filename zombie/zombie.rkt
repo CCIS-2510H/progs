@@ -224,22 +224,15 @@
                   (res . dead)))])))
 
 
-;; Interp: a full-speed zombie at posn
-(define-class zombie%
+(define-class a-zombie%
   (fields posn)
-  ;; move-toward : Loc -> Zombie
-  ;; Move this zombie toward the given location
-  (check-expect (origin-z . move-toward (new posn% ZOMBIE-SPEED 0))
-                (new zombie% (new posn% ZOMBIE-SPEED 0)))
-  (define (move-toward p)
-    (new zombie% (this . posn . move-toward/speed p ZOMBIE-SPEED)))
-  
   ;; draw-on/color : Color Scene -> Scene
   ;; Draw this zombie in given color on scene
   (check-expect (origin-z . draw-on/color "red" MT-SCENE)
                 (origin . draw-on/image 
                         (jack-o-lantern ZOMBIE-RADIUS "red")
                         MT-SCENE))
+
   (define (draw-on/color color scn)
     (this . posn . draw-on/image
           (jack-o-lantern ZOMBIE-RADIUS color)
@@ -252,31 +245,30 @@
   (define (touching? loc)
     (<= (this . posn . dist loc)
         ZOMBIE-RADIUS)))
+  
+
+;; Interp: a full-speed zombie at posn
+(define-class zombie%
+  (super a-zombie%)
+  ;(fields posn)
+  
+  ;; move-toward : Loc -> Zombie
+  ;; Move this zombie toward the given location
+  (check-expect (origin-z . move-toward (new posn% ZOMBIE-SPEED 0))
+                (new zombie% (new posn% ZOMBIE-SPEED 0)))
+  (define (move-toward p)
+    (new zombie% (this . posn . move-toward/speed p ZOMBIE-SPEED))))
 
 
 ;; Interp: a half-speed zombie at posn
 (define-class slow-zombie%
-  (fields posn)
+  (super a-zombie%)
+  ;(fields posn)
   ;; move-toward : Posn -> Zombie
   ;; Move this zombie toward the given position
   (define (move-toward p)
     (new slow-zombie% (this . posn . move-toward/speed p
-                            (/ ZOMBIE-SPEED 2))))
-  
-  ;; draw-on/color : Color Scene -> Scene
-  ;; Draw this zombie in given color on scene
-  (define (draw-on/color color scn)
-    (this . posn . draw-on/image
-          (jack-o-lantern ZOMBIE-RADIUS color)
-          scn))
-  
-  ;; touching? : Loc -> Boolean
-  ;; Is this zombie touching the given location?
-  (check-expect (origin-zs . touching? origin-z) true)
-  (define (touching? loc)
-    (<= (this . posn . dist loc)
-        ZOMBIE-RADIUS)))
-
+                            (/ ZOMBIE-SPEED 2)))))
 
 ;; Interp: a player at posn
 (define-class player%
